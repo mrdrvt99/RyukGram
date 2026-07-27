@@ -1,5 +1,4 @@
 name: Build sideloaded IPA from Release Assets
-
 on:
     workflow_dispatch:
         inputs:
@@ -46,21 +45,17 @@ on:
                 default: true
                 required: false
                 type: boolean
-
 concurrency:
     group: ${{ github.workflow }}-${{ github.ref }}
     cancel-in-progress: true
-
 env:
     UPSTREAM_REPO: faroukbmiled/RyukGram
-
 jobs:
     build:
         name: Build RyukGram from Release
         runs-on: macos-latest
         permissions:
             contents: write
-
         steps:
             - name: Validate selection
               env:
@@ -75,13 +70,10 @@ jobs:
                   echo "::error::A dup bundle id needs the no-plugins build. Enable build_noplugins."
                   exit 1
                 fi
-
             - name: Checkout
               uses: actions/checkout@v7
-
             - name: Install Dependencies
               run: brew install dpkg
-
             - name: Install IPA tooling (cyan + ipapatch)
               run: |
                 pip install --force-reinstall https://github.com/asdfzxcvbn/pyzule-rw/archive/main.zip
@@ -89,7 +81,6 @@ jobs:
                 curl -fLo "$HOME/.local/bin/ipapatch" https://github.com/asdfzxcvbn/ipapatch/releases/download/v2.1.3/ipapatch.macos-arm64
                 chmod +x "$HOME/.local/bin/ipapatch"
                 echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
             - name: Resolve release tag
               id: tag
               env:
@@ -113,7 +104,6 @@ jobs:
                 echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
                 echo "SUF=${SUF}" >> "$GITHUB_ENV"
                 echo "Using release tag: ${TAG} (version ${VERSION}${SUF})"
-
             - name: Download release assets (rootless deb + injection dylibs)
               env:
                 GH_TOKEN: ${{ github.token }}
@@ -121,7 +111,6 @@ jobs:
               run: |
                 set -euo pipefail
                 mkdir -p packages release-assets
-
                 # 410 tweak lives in the RyukGram-410 deb; main in RyukGram_. The
                 # plugin dylibs are shared, so both targets pull the same ones.
                 if [ "$TARGET" = "410" ]; then DEBP="RyukGram-410_*_rootless.deb"; else DEBP="RyukGram_*_rootless.deb"; fi
@@ -129,10 +118,6 @@ jobs:
                 DEB="$(ls -t release-assets/$DEBP 2>/dev/null | head -n1 || true)"
                 [ -n "$DEB" ] || { echo "::error::Rootless .deb ($DEBP) not found in release $TAG."; exit 1; }
                 echo "DEB=${DEB}" >> "$GITHUB_ENV"
-                IG_VER="$(basename "$DEB" | sed -nE 's/.*_IG(.*)_rootless\.deb$/\1/p')"
-                [ -n "$IG_VER" ] || IG_VER=unknown
-                echo "IG_VER=${IG_VER}" >> "$GITHUB_ENV"
-
                 if [ "${{ inputs.build_sideload }}" = "true" ]; then
                   gh release download "$TAG" --repo "$UPSTREAM_REPO" --dir release-assets \
                     --pattern "zxPluginsInject_v*.dylib"
@@ -140,7 +125,6 @@ jobs:
                   [ -n "$ZX_DYLIB" ] || { echo "::error::zxPluginsInject dylib not found in release $TAG (enable include_zxinject when releasing)."; exit 1; }
                   echo "ZX_DYLIB=${ZX_DYLIB}" >> "$GITHUB_ENV"
                 fi
-
                 if [ "${{ inputs.build_noplugins }}" = "true" ]; then
                   gh release download "$TAG" --repo "$UPSTREAM_REPO" --dir release-assets \
                     --pattern "NoPluginsPatch_v*.dylib"
@@ -148,38 +132,30 @@ jobs:
                   [ -n "$NP_DYLIB" ] || { echo "::error::NoPluginsPatch dylib not found in release $TAG (enable include_noplugins_patch when releasing)."; exit 1; }
                   echo "NP_DYLIB=${NP_DYLIB}" >> "$GITHUB_ENV"
                 fi
-
                 ls -la release-assets
-
             - name: Extract dylib + bundle from rootless deb
               run: |
                 set -euo pipefail
                 STAGE="$(mktemp -d)"
                 dpkg-deb -x "$DEB" "$STAGE"
-
                 DYLIB_SRC="$(find "$STAGE" -type f -name 'RyukGram.dylib' | head -1)"
                 BUNDLE_SRC="$(find "$STAGE" -type d -name 'RyukGram.bundle' | head -1)"
                 [ -n "$DYLIB_SRC" ] || { echo "::error::RyukGram.dylib not found in deb."; exit 1; }
                 [ -n "$BUNDLE_SRC" ] || { echo "::error::RyukGram.bundle not found in deb."; exit 1; }
-
                 cp "$DYLIB_SRC" packages/RyukGram.dylib
                 rm -rf packages/RyukGram.bundle
                 cp -R "$BUNDLE_SRC" packages/RyukGram.bundle
-
                 if [ "${{ inputs.build_sideload }}" = "true" ]; then
                   # Match the @rpath LC that ipapatch writes into target binaries.
                   cp "$ZX_DYLIB" packages/zxPluginsInject.dylib
                   install_name_tool -id "@rpath/zxPluginsInject.dylib" packages/zxPluginsInject.dylib 2>/dev/null || true
                 fi
-
                 if [ "${{ inputs.build_noplugins }}" = "true" ]; then
                   cp "$NP_DYLIB" packages/NoPluginsPatch.dylib
                 fi
-
                 rm -rf "$STAGE"
                 ls -la packages
                 ls -la packages/RyukGram.bundle | head -20
-
             - name: Prepare Instagram IPA
               env:
                 Instagram_URL: ${{ inputs.decrypted_instagram_url }}
@@ -187,7 +163,25 @@ jobs:
                 set -euo pipefail
                 wget "$Instagram_URL" --no-verbose -O packages/com.burbn.instagram.ipa
                 ls -la packages
-
+            - name: Extract Instagram version from IPA
+              id: igver
+              run: |
+                set -euo pipefail
+                TMP="$(mktemp -d)"
+                unzip -q packages/com.burbn.instagram.ipa -d "$TMP"
+                APP_DIR="$(find "$TMP/Payload" -maxdepth 1 -type d -name '*.app' | head -1)"
+                [ -n "$APP_DIR" ] || { echo "::error::No .app found in IPA."; exit 1; }
+                PLIST="$APP_DIR/Info.plist"
+                [ -f "$PLIST" ] || { echo "::error::Info.plist not found in IPA."; exit 1; }
+                IG_VER="$(plutil -extract CFBundleShortVersionString raw -o - "$PLIST" 2>/dev/null || true)"
+                if [ -z "$IG_VER" ]; then
+                  IG_VER="$(plutil -extract CFBundleVersion raw -o - "$PLIST" 2>/dev/null || true)"
+                fi
+                [ -n "$IG_VER" ] || { echo "::error::Could not extract Instagram version from IPA Info.plist."; exit 1; }
+                echo "IG_VER=${IG_VER}" >> "$GITHUB_ENV"
+                echo "ig_ver=${IG_VER}" >> "$GITHUB_OUTPUT"
+                echo "Detected Instagram version from IPA: ${IG_VER}"
+                rm -rf "$TMP"
             - name: Build sideloaded IPA (cyan + ipapatch with zxPluginsInject)
               if: ${{ inputs.build_sideload }}
               env:
@@ -203,7 +197,6 @@ jobs:
                   -f packages/RyukGram.dylib packages/RyukGram.bundle \
                   -c 9 -m 15.0 -du \
                   ${NAME_ARGS[@]+"${NAME_ARGS[@]}"}
-
                 # Embed Safari "Open in Instagram" extension before ipapatch
                 # re-signs, so instagram.com links open the app.
                 APPEX_SRC="extensions/OpenInstagramSafariExtension.appex"
@@ -221,16 +214,13 @@ jobs:
                   fi
                   rm -rf "$INJECT_TMP"
                 fi
-
                 echo "Running ipapatch (zxPluginsInject LC injection)"
                 ipapatch \
                   --input packages/RyukGram-sideloaded.ipa \
                   --inplace --noconfirm \
                   --dylib packages/zxPluginsInject.dylib
-
                 mv packages/RyukGram-sideloaded.ipa "packages/RyukGram_sideload_v${VERSION}_IG${IG_VER}.ipa"
                 ls -la packages
-
             - name: Build no-plugins IPA (cyan + NoPluginsPatch, appex stripped)
               if: ${{ inputs.build_noplugins }}
               env:
@@ -248,7 +238,6 @@ jobs:
                   -f packages/RyukGram.dylib packages/NoPluginsPatch.dylib packages/RyukGram.bundle \
                   -c 9 -m 15.0 -du \
                   ${DUP_ARGS[@]+"${DUP_ARGS[@]}"}
-
                 # No-plugins: strip every app extension (no ipapatch, no Safari ext).
                 INJECT_TMP="$(mktemp -d)"
                 unzip -q packages/RyukGram-noplugins.ipa -d "$INJECT_TMP"
@@ -259,34 +248,30 @@ jobs:
                   mv "$INJECT_TMP/../repacked.ipa" packages/RyukGram-noplugins.ipa
                 fi
                 rm -rf "$INJECT_TMP"
-
                 OUT="RyukGram_noplugins_v${VERSION}_IG${IG_VER}.ipa"
                 [ -n "$DUP_ID" ] && OUT="RyukGram_noplugins_v${VERSION}_IG${IG_VER}-dup.ipa"
                 mv packages/RyukGram-noplugins.ipa "packages/${OUT}"
                 ls -la packages
-
             - name: Upload sideload IPA artifact
               if: ${{ inputs.upload_artifact && inputs.build_sideload }}
               uses: actions/upload-artifact@v7
               with:
-                name: RyukGram_sideload_v${{ steps.tag.outputs.version }}
+                name: RyukGram_sideload_v${{ steps.tag.outputs.version }}_IG${{ steps.igver.outputs.ig_ver }}
                 path: packages/RyukGram_sideload_v*.ipa
                 if-no-files-found: error
-
             - name: Upload no-plugins IPA artifact
               if: ${{ inputs.upload_artifact && inputs.build_noplugins }}
               uses: actions/upload-artifact@v7
               with:
-                name: RyukGram_noplugins_v${{ steps.tag.outputs.version }}
+                name: RyukGram_noplugins_v${{ steps.tag.outputs.version }}_IG${{ steps.igver.outputs.ig_ver }}
                 path: packages/RyukGram_noplugins*.ipa
                 if-no-files-found: error
-
             - name: Create GitHub Release
               if: ${{ inputs.upload_artifact }}
               uses: softprops/action-gh-release@v3
               with:
                 tag_name: v${{ steps.tag.outputs.version }}
-                name: RyukGram v${{ steps.tag.outputs.version }}
+                name: RyukGram v${{ steps.tag.outputs.version }} (Instagram ${{ steps.igver.outputs.ig_ver }})
                 draft: false
                 prerelease: false
                 files: |
