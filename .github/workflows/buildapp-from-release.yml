@@ -59,7 +59,7 @@ jobs:
         name: Build RyukGram from Release
         runs-on: macos-latest
         permissions:
-            contents: read
+            contents: write
 
         steps:
             - name: Validate selection
@@ -280,3 +280,18 @@ jobs:
                 name: RyukGram_noplugins_v${{ steps.tag.outputs.version }}
                 path: packages/RyukGram_noplugins*.ipa
                 if-no-files-found: error
+
+            - name: Create GitHub Release
+              if: ${{ inputs.upload_artifact }}
+              uses: softprops/action-gh-release@v3
+              with:
+                tag_name: v${{ steps.tag.outputs.version }}
+                name: RyukGram v${{ steps.tag.outputs.version }}
+                draft: false
+                prerelease: false
+                files: |
+                  packages/RyukGram_sideload_v*.ipa
+                  packages/RyukGram_noplugins*.ipa
+                generate_release_notes: true
+              env:
+                GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
