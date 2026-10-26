@@ -357,8 +357,8 @@ jobs:
                 shopt -s nullglob
                 files=(ipas/*.ipa)
                 [ ${#files[@]} -gt 0 ] || { echo "::error::No IPA to upload."; exit 1; }
-                TITLE="RyukGram ${VERSION}${SUF} for Instagram ${IG_MAJOR}"
-                NOTES="Sideload build of RyukGram ${VERSION}${SUF} for Instagram ${IG_VER} (tag ${RELEASE_TAG})."
+                TITLE="RyukGram ${VERSION}${SUF}-${IG_MAJOR}"
+                NOTES="Sideload build of RyukGram ${VERSION}${SUF}-${IG_VER}"
                 if ! gh release view "$RELEASE_TAG" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
                   gh release create "$RELEASE_TAG" \
                     --repo "${GITHUB_REPOSITORY}" \
