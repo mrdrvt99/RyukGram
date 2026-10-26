@@ -36,7 +36,7 @@ on:
                 required: false
                 type: string
             release_tag:
-                description: "Release tag to download assets from and upload IPAs to (blank = latest)"
+                description: "Upstream release tag to download assets from (blank = latest). Created release tag will be <tag>-<ig-major> (e.g. v1.5.0-450)."
                 default: ""
                 required: false
                 type: string
@@ -58,6 +58,9 @@ jobs:
             tag: ${{ steps.tag.outputs.tag }}
             version: ${{ steps.tag.outputs.version }}
             suf: ${{ steps.tag.outputs.suf }}
+            ig_ver: ${{ steps.tag.outputs.ig_ver }}
+            ig_major: ${{ steps.tag.outputs.ig_major }}
+            release_tag: ${{ steps.tag.outputs.release_tag }}
         steps:
             - name: Validate selection
               env:
@@ -73,12 +76,13 @@ jobs:
                   echo "::error::A dup bundle id needs the no-plugins build. Enable build_noplugins."
                   exit 1
                 fi
-            - name: Resolve release tag
+            - name: Resolve release tag + Instagram version
               id: tag
               env:
                 GH_TOKEN: ${{ github.token }}
                 INPUT_TAG: ${{ inputs.release_tag }}
                 INPUT_TARGET: ${{ inputs.target }}
+                Instagram_URL: ${{ inputs.decrypted_instagram_url }}
               run: |
                 set -euo pipefail
                 if [ -n "$INPUT_TAG" ]; then
@@ -90,10 +94,34 @@ jobs:
                 VERSION="${TAG#v}"
                 SUF=""
                 [ "$INPUT_TARGET" = "410" ] && SUF="-410"
+
+                # Extract Instagram version from the supplied IPA
+                mkdir -p /tmp/ipa-stage
+                wget "$Instagram_URL" --no-verbose -O /tmp/instagram.ipa
+                PLIST="$(unzip -Z1 /tmp/instagram.ipa 'Payload/*.app/Info.plist' 2>/dev/null | awk -F/ 'NF==3' | head -1 || true)"
+                IG_VER=""
+                if [ -n "$PLIST" ]; then
+                  unzip -qo -j /tmp/instagram.ipa "$PLIST" -d /tmp/ipa-stage
+                  IG_VER="$(plutil -extract CFBundleShortVersionString raw -o - /tmp/ipa-stage/Info.plist 2>/dev/null || true)"
+                  [ -n "$IG_VER" ] || IG_VER="$(plutil -extract CFBundleVersion raw -o - /tmp/ipa-stage/Info.plist 2>/dev/null || true)"
+                fi
+                [ -n "$IG_VER" ] || IG_VER="unknown"
+
+                # Major only for the tag (450.0.0 → 450, 410.1.0 → 410)
+                IG_MAJOR="${IG_VER%%.*}"
+                RELEASE_TAG="${TAG}-${IG_MAJOR}"
+
+                rm -rf /tmp/ipa-stage /tmp/instagram.ipa
+
                 echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
                 echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
                 echo "suf=${SUF}" >> "$GITHUB_OUTPUT"
-                echo "Using release tag: ${TAG} (version ${VERSION}${SUF})"
+                echo "ig_ver=${IG_VER}" >> "$GITHUB_OUTPUT"
+                echo "ig_major=${IG_MAJOR}" >> "$GITHUB_OUTPUT"
+                echo "release_tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+                echo "Using upstream tag: ${TAG} (version ${VERSION}${SUF})"
+                echo "Instagram version: ${IG_VER} (major ${IG_MAJOR})"
+                echo "Release tag will be: ${RELEASE_TAG}"
     sideload:
         name: Build sideloaded IPA (cyan + ipapatch with zxPluginsInject)
         needs: resolve
@@ -125,9 +153,7 @@ jobs:
                 DEB="$(ls -t release-assets/$DEBP 2>/dev/null | head -n1 || true)"
                 [ -n "$DEB" ] || { echo "::error::Rootless .deb ($DEBP) not found in release $TAG."; exit 1; }
                 echo "DEB=${DEB}" >> "$GITHUB_ENV"
-                IG_VER="$(basename "$DEB" | sed -nE 's/.*_IG(.*)_rootless\.deb$/\1/p')"
-                [ -n "$IG_VER" ] || IG_VER=unknown
-                echo "IG_VER=${IG_VER}" >> "$GITHUB_ENV"
+                echo "IG_VER=${{ needs.resolve.outputs.ig_ver }}" >> "$GITHUB_ENV"
                 gh release download "$TAG" --repo "$UPSTREAM_REPO" --dir release-assets \
                   --pattern "zxPluginsInject_v*.dylib"
                 ZX_DYLIB="$(ls -t release-assets/zxPluginsInject_v*.dylib 2>/dev/null | head -n1 || true)"
@@ -157,21 +183,6 @@ jobs:
               run: |
                 set -euo pipefail
                 wget "$Instagram_URL" --no-verbose -O packages/com.burbn.instagram.ipa
-                PLIST="$(unzip -Z1 packages/com.burbn.instagram.ipa 'Payload/*.app/Info.plist' 2>/dev/null | awk -F/ 'NF==3' | head -1 || true)"
-                IPA_VER=""
-                if [ -n "$PLIST" ]; then
-                  STAGE="$(mktemp -d)"
-                  unzip -qo -j packages/com.burbn.instagram.ipa "$PLIST" -d "$STAGE"
-                  IPA_VER="$(plutil -extract CFBundleShortVersionString raw -o - "$STAGE/Info.plist" 2>/dev/null || true)"
-                  [ -n "$IPA_VER" ] || IPA_VER="$(plutil -extract CFBundleVersion raw -o - "$STAGE/Info.plist" 2>/dev/null || true)"
-                  rm -rf "$STAGE"
-                fi
-                if [ -n "$IPA_VER" ]; then
-                  echo "IG_VER=${IPA_VER}" >> "$GITHUB_ENV"
-                  echo "IG version from IPA: ${IPA_VER} (deb said ${IG_VER})"
-                else
-                  echo "::warning::Could not read the version from the IPA; keeping IG_VER=${IG_VER}"
-                fi
                 ls -la packages
             - name: Build sideloaded IPA (cyan + ipapatch with zxPluginsInject)
               env:
@@ -252,9 +263,7 @@ jobs:
                 DEB="$(ls -t release-assets/$DEBP 2>/dev/null | head -n1 || true)"
                 [ -n "$DEB" ] || { echo "::error::Rootless .deb ($DEBP) not found in release $TAG."; exit 1; }
                 echo "DEB=${DEB}" >> "$GITHUB_ENV"
-                IG_VER="$(basename "$DEB" | sed -nE 's/.*_IG(.*)_rootless\.deb$/\1/p')"
-                [ -n "$IG_VER" ] || IG_VER=unknown
-                echo "IG_VER=${IG_VER}" >> "$GITHUB_ENV"
+                echo "IG_VER=${{ needs.resolve.outputs.ig_ver }}" >> "$GITHUB_ENV"
                 gh release download "$TAG" --repo "$UPSTREAM_REPO" --dir release-assets \
                   --pattern "NoPluginsPatch_v*.dylib"
                 NP_DYLIB="$(ls -t release-assets/NoPluginsPatch_v*.dylib 2>/dev/null | head -n1 || true)"
@@ -283,21 +292,6 @@ jobs:
               run: |
                 set -euo pipefail
                 wget "$Instagram_URL" --no-verbose -O packages/com.burbn.instagram.ipa
-                PLIST="$(unzip -Z1 packages/com.burbn.instagram.ipa 'Payload/*.app/Info.plist' 2>/dev/null | awk -F/ 'NF==3' | head -1 || true)"
-                IPA_VER=""
-                if [ -n "$PLIST" ]; then
-                  STAGE="$(mktemp -d)"
-                  unzip -qo -j packages/com.burbn.instagram.ipa "$PLIST" -d "$STAGE"
-                  IPA_VER="$(plutil -extract CFBundleShortVersionString raw -o - "$STAGE/Info.plist" 2>/dev/null || true)"
-                  [ -n "$IPA_VER" ] || IPA_VER="$(plutil -extract CFBundleVersion raw -o - "$STAGE/Info.plist" 2>/dev/null || true)"
-                  rm -rf "$STAGE"
-                fi
-                if [ -n "$IPA_VER" ]; then
-                  echo "IG_VER=${IPA_VER}" >> "$GITHUB_ENV"
-                  echo "IG version from IPA: ${IPA_VER} (deb said ${IG_VER})"
-                else
-                  echo "::warning::Could not read the version from the IPA; keeping IG_VER=${IG_VER}"
-                fi
                 ls -la packages
             - name: Build no-plugins IPA (cyan + NoPluginsPatch, appex stripped)
               env:
@@ -353,23 +347,28 @@ jobs:
             - name: Upload IPA to GitHub Release
               env:
                 GH_TOKEN: ${{ github.token }}
-                TAG: ${{ needs.resolve.outputs.tag }}
+                RELEASE_TAG: ${{ needs.resolve.outputs.release_tag }}
+                VERSION: ${{ needs.resolve.outputs.version }}
+                SUF: ${{ needs.resolve.outputs.suf }}
+                IG_VER: ${{ needs.resolve.outputs.ig_ver }}
+                IG_MAJOR: ${{ needs.resolve.outputs.ig_major }}
               run: |
                 set -euo pipefail
                 shopt -s nullglob
                 files=(ipas/*.ipa)
                 [ ${#files[@]} -gt 0 ] || { echo "::error::No IPA to upload."; exit 1; }
-                NOTES="Sideload build for ${TAG}."
-                if ! gh release view "$TAG" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-                  gh release create "$TAG" \
+                TITLE="RyukGram ${VERSION}${SUF} for Instagram ${IG_MAJOR}"
+                NOTES="Sideload build of RyukGram ${VERSION}${SUF} for Instagram ${IG_VER} (tag ${RELEASE_TAG})."
+                if ! gh release view "$RELEASE_TAG" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+                  gh release create "$RELEASE_TAG" \
                     --repo "${GITHUB_REPOSITORY}" \
-                    --title "RyukGram ${TAG}" \
+                    --title "$TITLE" \
                     --notes "$NOTES" \
                     --latest=false
                 fi
-                gh release upload "$TAG" \
+                gh release upload "$RELEASE_TAG" \
                   --repo "${GITHUB_REPOSITORY}" \
                   --clobber \
                   "${files[@]}"
-                echo "Uploaded to https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
+                echo "Uploaded to https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}"
                 printf ' - %s\n' "${files[@]}"
