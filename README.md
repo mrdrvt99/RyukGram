@@ -4,7 +4,7 @@
 
 **The Instagram tweak for iOS power users.**
 
-`v1.5.0` · Instagram 452.0.1 | Instagram 410.1.0
+`v1.5.1` · Instagram 453.0.0 | Instagram 410.1.0
 
 <sub>The Instagram 410 build is for older iOS versions and trails the main build on newer features.</sub>
 
@@ -115,7 +115,7 @@ Once it is running, open the settings by holding the button at the top of your p
 - Grid feed: your home feed as thumbnails with stats, columns, shapes, spacing, shading, rounded corners and date format of your choice
 - Hold a tile to preview, like, follow, expand, share, or copy the link
 - Switch back to Instagram's feed from the header or a floating button
-- Hide the stories tray, suggested stories, and highlights
+- Hide the stories tray, suggested stories, highlights, and live streams
 - View a profile picture from a story tray long press
 - Hide the whole feed, or just suggested posts, accounts, reels, threads, and Facebook cards
 - Cap posts in a row and filter by minimum likes, comments, views, or reposts
@@ -134,11 +134,12 @@ Once it is running, open the settings by holding the button at the top of your p
 - Custom tap controls and auto scroll that skips sponsored and photo reels
 - Hold controls for pause, the options menu, or picture in picture
 - Playback menu for speed, seek, next and previous, sound, and picture in picture
+- Action button, playback menu and menu button hold in the long video player
 - Always visible scrubber, no auto unmute, and refresh confirmation
 - Expanded view without cropped sides
 - Unlock password locked reels
 - Reorder, hide, or drop the counts on sidebar buttons
-- Hide the header, friend avatars, promo pills, and the comment bar
+- Hide the header, friend avatars, promo pills, the comment bar, and live streams
 - Swipe left to open the author's profile
 - Show the repost date
 - Disable reel scrolling
@@ -166,7 +167,7 @@ Once it is running, open the settings by holding the button at the top of your p
 - Copy notes and reveal full counts
 - Spoof your picture, username, name, bio, Threads handle, stats, badge, post metrics and story views on your device
 - Clone any profile into your spoof and keep it synced
-- Spoof multipliers that grow with the real count
+- Spoof multipliers that grow with the real count, with an optional base and random daily growth
 - Hide the Threads button
 - Sort and search follower and following lists
 - Follow request tracker, even for requests canceled before you answer
@@ -243,6 +244,7 @@ Once it is running, open the settings by holding the button at the top of your p
 - Bypass Reveal stickers and pick custom sticker colors
 - Cutout stickers from the gallery
 - Story backgrounds in any color or gradient
+- Long videos post to stories as back to back parts, not trimmed
 - Download disappearing DM media in full quality
 - Hide the views toggle and keep views blocked
 - Send Instants from your album, with crop and trim
@@ -258,6 +260,7 @@ Once it is running, open the settings by holding the button at the top of your p
 - Notification pill you can place anywhere
 - Mirror notifications to the iOS notification center
 - Reorder and hide tab bar icons on a live preview
+- Native iOS liquid glass tab bar on iOS 26 with 5 tabs or fewer
 - Add RyukGram screens, Saved and Activity as tabs, and pick the launch tab
 - Hold any tab to open a RyukGram screen
 - Messages-only mode on a schedule, for a set time, or from Shortcuts links
@@ -266,9 +269,9 @@ Once it is running, open the settings by holding the button at the top of your p
 - Home shortcut button with new item badges, also shown on added tabs
 - Notification history with filters and search
 - Bring back the old Instagram logo
-- Experimental flags
-- MobileConfig browser to read, change, export and import Instagram's internal settings
+- Instagram feature flags browser to read, change, export and import Instagram's internal MobileConfig settings
 - Every MobileConfig config named, with notes, search, and new ones marked per update
+- Record which configs Instagram reads during any action
 
 ### Confirm actions
 - Optional confirmations for likes, follows, reposts, calls, comments, and more
