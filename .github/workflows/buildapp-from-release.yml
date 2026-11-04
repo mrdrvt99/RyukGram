@@ -57,7 +57,7 @@ env:
 jobs:
     prepare:
         name: Prepare assets
-        runs-on: macos-latest
+        runs-on: xcode-27
         permissions:
             contents: read
         outputs:
@@ -233,7 +233,7 @@ jobs:
     build:
         name: Build ${{ matrix.build }}
         needs: prepare
-        runs-on: macos-latest
+        runs-on: xcode-27
         strategy:
             matrix:
                 build: ${{ fromJSON(needs.prepare.outputs.matrix) }}
@@ -355,7 +355,7 @@ jobs:
     release:
         name: Create release with IPAs
         needs: [prepare, build]
-        runs-on: macos-latest
+        runs-on: xcode-27
         permissions:
             contents: write
         steps:
